@@ -4,6 +4,12 @@ Welcome to **C++ Ray Tracer** – a modern, multi-threaded ray tracing engine wr
 
 ---
 
+## Example Output
+
+![Rendered Example](image.png)
+
+---
+
 ## Features
 
 - **Physically-based rendering**: Realistic lighting, reflections, and refractions

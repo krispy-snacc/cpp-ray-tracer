@@ -8,7 +8,7 @@ int main() {
 
     // Image
     auto aspect_ratio = 16.0 / 9.0;
-    int image_width = 1920;
+    int image_width = 1280;
 
     // Calculate the image height, and ensure that it's at least 1.
     int image_height = int(image_width / aspect_ratio);
@@ -20,7 +20,7 @@ int main() {
 
     scene.canvas_height = image_height;
     scene.canvas_width = image_width;
-    scene.samples_per_pixel = 100;
+    scene.samples_per_pixel = 200;
     scene.max_depth = 100;
 
     scene.vfov = 20;
@@ -44,7 +44,7 @@ int main() {
             if ((center - Point3(4, 0.2, 0)).length() > 0.9) {
                 std::shared_ptr<Material> sphere_material;
 
-                if (choose_mat < 0.5) {
+                if (choose_mat < 0.3) {
                     // diffuse
                     auto albedo = Color::random() * Color::random();
                     sphere_material = MakeLambertian(albedo);
@@ -52,9 +52,9 @@ int main() {
                 }
                 else if (choose_mat < 0.8) {
                     // emission
-                    auto emit_color = from_hsv(random_double(), 0.7, 1);
+                    auto emit_color = from_hsv(random_double(0.2, 0.95), 0.7, 1);
                     emit_color = emit_color * emit_color;
-                    sphere_material = MakeEmission(emit_color, random_double(6.0, 20.0));
+                    sphere_material = MakeEmission(emit_color, random_double(6.0, 15.0));
                     scene.AddObject(MakeSphere(center, 0.2, sphere_material));
                 }
                 else if (choose_mat < 0.95) {
@@ -98,6 +98,6 @@ int main() {
 
 
     scene.Render();
-    scene.Write("image.png");
+    scene.Write("output/image.png");
     return 0;
 }

@@ -9,6 +9,9 @@
 #include <atomic>
 #include <mutex>
 #include <iomanip> // for std::setprecision
+#include <filesystem>  // C++17
+
+namespace fs = std::filesystem;
 
 
 #include "Vec3.h"
@@ -17,7 +20,6 @@
 #include "Object.h"
 #include "Material.h"
 #include "Utils.h"
-
 
 std::mutex console_mutex; // Global or static to protect console output
 
@@ -111,8 +113,8 @@ public:
         std::atomic<int> lines_done(0);
 
         auto render_rows = [&](int start_row, int end_row) {
-            for (int j = start_row; j < end_row; ++j) {
-                for (int i = 0; i < canvas_width; ++i) {
+            for (int j = start_row; j < end_row; j++) {
+                for (int i = 0; i < canvas_width; i++) {
                     int index = j * canvas_width + i;
                     frame[index] = samplePixel(i, j);
                 }
@@ -147,8 +149,7 @@ public:
         }
     }
 
-    void Write(std::string filename) {
-
+    void Write(fs::path output_path) {
         int write_buffer_size = canvas_width * canvas_height * 3;
         unsigned char* write_buffer = new unsigned char[write_buffer_size];
 
@@ -181,8 +182,9 @@ public:
 
 
 
-        if (stbi_write_png(filename.c_str(), canvas_width, canvas_height, 3, write_buffer, canvas_width * 3)) {
-            std::cout << "Saved " << filename << std::endl;
+        fs::create_directories(output_path.parent_path());
+        if (stbi_write_png(output_path.string().c_str(), canvas_width, canvas_height, 3, write_buffer, canvas_width * 3)) {
+            std::cout << "Saved " << output_path.string() << std::endl;
         }
         else {
             std::cerr << "Failed to write PNG" << std::endl;
@@ -227,7 +229,7 @@ private:
 
         Vec3 unit_direction = normalize(r.direction());
         double t = (unit_direction.y() + 1.0) / 2.0;
-        double exposure = 1;
+        double exposure = 0.05;
         return lerp(Vec3(1, 1, 1) * exposure, Vec3(0.5, 0.7, 1) * exposure, t);
     }
 

@@ -7,8 +7,8 @@ class Material {
 public:
     virtual ~Material() = default;
 
-    virtual bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered) const {
-        return false;
+    virtual void fall(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, bool& scatter, bool& absorbed, bool& emit) const {
+        return;
     }
 };
 
@@ -20,13 +20,13 @@ private:
 public:
     Lambertian(const Color& albedo) : albedo(albedo) {}
 
-    bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered) const override {
+    void fall(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, bool& scatter, bool& absorbed, bool& emit) const override {
         Vec3 scatter_direction = rec.normal + random_unit_vector();
         if (scatter_direction.near_zero())
             scatter_direction = rec.normal;
         scattered = Ray(rec.hitPoint, scatter_direction);
         attenuation = albedo;
-        return true;
+        scatter = true;
     }
 
 };
@@ -35,6 +35,8 @@ inline std::shared_ptr<Material> MakeLambertian(const Color& albedo) {
     return std::make_shared<Lambertian>(albedo);
 }
 
+
+
 class Metal : public Material {
 private:
     Color albedo;
@@ -42,12 +44,12 @@ private:
 public:
     Metal(const Color& albedo, double fuzz) : albedo(albedo), fuzz(fuzz) {}
 
-    bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered) const override {
+    void fall(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, bool& scatter, bool& absorbed, bool& emit) const override {
         Vec3 reflected = reflect(r_in.direction(), rec.normal);
         reflected = normalize(reflected) + (fuzz * random_unit_vector());
         scattered = Ray(rec.hitPoint, reflected);
         attenuation = albedo;
-        return (dot(scattered.direction(), rec.normal) > 0);
+        scatter = (dot(scattered.direction(), rec.normal) > 0);
     }
 
 };
@@ -56,13 +58,15 @@ inline std::shared_ptr<Material> MakeMetal(const Color& albedo, double fuzz) {
     return std::make_shared<Metal>(albedo, fuzz);
 }
 
+
+
 class Dielectric : public Material {
 private:
     double refractive_index;
 public:
     Dielectric(double refractive_index) : refractive_index(refractive_index) {}
 
-    bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered) const override {
+    void fall(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, bool& scatter, bool& absorbed, bool& emit) const override {
         attenuation = Color(1.0, 1.0, 1.0);
         double ri = rec.front_face ? (1.0 / refractive_index) : refractive_index;
 
@@ -79,7 +83,7 @@ public:
             direction = refract(unit_direction, rec.normal, ri);
 
         scattered = Ray(rec.hitPoint, direction);
-        return true;
+        scatter = true;
     }
 private:
     static double reflectance(double cosine, double refraction_index) {
@@ -93,6 +97,28 @@ private:
 
 inline std::shared_ptr<Material> MakeDielectric(double refractive_index) {
     return std::make_shared<Dielectric>(refractive_index);
+}
+
+
+
+class Emission : public Material {
+private:
+    Color emit_color;
+    double intensity;
+public:
+    Emission(Color emit_color, double intensity) : emit_color(emit_color), intensity(intensity) {}
+
+    void fall(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, bool& scatter, bool& absorbed, bool& emit) const override {
+        attenuation = intensity * emit_color;
+        emit = true;
+        scatter = false;
+    }
+
+
+};
+
+inline std::shared_ptr<Material> MakeEmission(Color emit_color, double intensity) {
+    return std::make_shared<Emission>(emit_color, intensity);
 }
 
 

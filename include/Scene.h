@@ -148,27 +148,37 @@ public:
     }
 
     void Write(std::string filename) {
+
         int write_buffer_size = canvas_width * canvas_height * 3;
         unsigned char* write_buffer = new unsigned char[write_buffer_size];
 
-        for (int j = 0; j < canvas_height; j++) {
-            for (int i = 0; i < canvas_width; i++) {
+        for (int j = 0; j < canvas_height; ++j) {
+            for (int i = 0; i < canvas_width; ++i) {
                 int idx = j * canvas_width + i;
 
                 double r = frame[idx].x();
                 double g = frame[idx].y();
                 double b = frame[idx].z();
 
-                // Apply a linear to gamma transform for gamma 2
-                r = linear_to_gamma(r);
+                auto tone = [](double x) { return x / (1.0 + x); };   // maps [0,∞) → [0,1)
+
+                r = tone(r);
+                g = tone(g);
+                b = tone(b);
+
+                r = linear_to_gamma(r);   // γ-correct afterwards
                 g = linear_to_gamma(g);
                 b = linear_to_gamma(b);
 
-                write_buffer[idx * 3 + 0] = (unsigned char)(r * 255.999);
-                write_buffer[idx * 3 + 1] = (unsigned char)(g * 255.999);
-                write_buffer[idx * 3 + 2] = (unsigned char)(b * 255.999);
+                Interval col_range(0.0, 0.999);
+                // safe cast
+                write_buffer[idx * 3 + 0] = static_cast<unsigned char>(256 * col_range.clamp(r));
+                write_buffer[idx * 3 + 1] = static_cast<unsigned char>(256 * col_range.clamp(g));
+                write_buffer[idx * 3 + 2] = static_cast<unsigned char>(256 * col_range.clamp(b));
+
             }
         }
+
 
 
         if (stbi_write_png(filename.c_str(), canvas_width, canvas_height, 3, write_buffer, canvas_width * 3)) {
@@ -199,15 +209,26 @@ private:
 
         if (hit_anything) {
             Ray scattered;
+            Color emitted;
             Color attenuation;
-            if (rec.mat->scatter(r, rec, attenuation, scattered))
+            bool didAbsorb = false;
+            bool didScatter = false;
+            bool didEmit = false;
+
+            rec.mat->fall(r, rec, attenuation, scattered, didScatter, didAbsorb, didEmit);
+            if (didEmit) emitted = attenuation;
+
+            if (didScatter)
                 return attenuation * getRayColor(scattered, depth - 1);
+            else if (didEmit)
+                return attenuation;  // Emission color
             return Color(0, 0, 0);
         }
 
         Vec3 unit_direction = normalize(r.direction());
         double t = (unit_direction.y() + 1.0) / 2.0;
-        return lerp(Vec3(1, 1, 1), Vec3(0.5, 0.7, 1), t);
+        double exposure = 1;
+        return lerp(Vec3(1, 1, 1) * exposure, Vec3(0.5, 0.7, 1) * exposure, t);
     }
 
 

@@ -21,7 +21,7 @@ int main() {
     scene.canvas_height = image_height;
     scene.canvas_width = image_width;
     scene.samples_per_pixel = 100;
-    scene.max_depth = 15;
+    scene.max_depth = 100;
 
     scene.vfov = 20;
     scene.lookfrom = Point3(13, 2, 3);
@@ -44,10 +44,17 @@ int main() {
             if ((center - Point3(4, 0.2, 0)).length() > 0.9) {
                 std::shared_ptr<Material> sphere_material;
 
-                if (choose_mat < 0.8) {
+                if (choose_mat < 0.5) {
                     // diffuse
                     auto albedo = Color::random() * Color::random();
                     sphere_material = MakeLambertian(albedo);
+                    scene.AddObject(MakeSphere(center, 0.2, sphere_material));
+                }
+                else if (choose_mat < 0.8) {
+                    // emission
+                    auto emit_color = from_hsv(random_double(), 0.7, 1);
+                    emit_color = emit_color * emit_color;
+                    sphere_material = MakeEmission(emit_color, random_double(6.0, 20.0));
                     scene.AddObject(MakeSphere(center, 0.2, sphere_material));
                 }
                 else if (choose_mat < 0.95) {

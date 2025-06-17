@@ -6,17 +6,17 @@ Welcome to **C++ Ray Tracer** – a modern, multi-threaded ray tracing engine wr
 
 ## Example Output
 
-![Rendered Example](image.png)
+![Rendered Example](sample.png)
 
 ---
 
 ## Features
 
-- **Physically-based rendering**: Realistic lighting, reflections, and refractions
-- **Multi-threaded**: Fast rendering using all your CPU cores
-- **Modular design**: Easy to extend with new objects and materials
-- **Gamma-corrected output**: Images look great on any display
-- **PNG export**: High-quality output via [stb_image_write.h](include/stb_image_write.h)
+-   **Physically-based rendering**: Realistic lighting, reflections, and refractions
+-   **Multi-threaded**: Fast rendering using all your CPU cores
+-   **Modular design**: Easy to extend with new objects and materials
+-   **Gamma-corrected output**: Images look great on any display
+-   **PNG export**: High-quality output via [stb_image_write.h](include/stb_image_write.h)
 
 ---
 
@@ -37,8 +37,6 @@ make
 ./bin/MyRayTracer
 ```
 
-Your rendered image will be saved as `image.png`.
-
 ---
 
 ## Project Structure
@@ -54,14 +52,14 @@ build/     # Build artifacts
 
 ## How It Works
 
-- Rays are cast from a virtual camera into a 3D scene.
-- Objects (like spheres) are intersected, and materials determine their appearance.
-- Lighting, shadows, and reflections are computed recursively.
-- The final image is written to a PNG file.
+-   Rays are cast from a virtual camera into a 3D scene.
+-   Objects (like spheres) are intersected, and materials determine their appearance.
+-   Lighting, shadows, and reflections are computed recursively.
+-   The final image is written to a PNG file.
 
 ---
 
 ## Credits
 
-- [stb_image_write.h](https://github.com/nothings/stb) by Sean Barrett
-- Inspired by Peter Shirley’s "Ray Tracing in One Weekend" series
+-   [stb_image_write.h](https://github.com/nothings/stb) by Sean Barrett
+-   Inspired by Peter Shirley’s "Ray Tracing in One Weekend" series

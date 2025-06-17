@@ -20,8 +20,8 @@ int main() {
 
     scene.canvas_height = image_height;
     scene.canvas_width = image_width;
-    scene.samples_per_pixel = 200;
-    scene.max_depth = 100;
+    scene.samples_per_pixel = 150;
+    scene.max_bouces = 100;
 
     scene.vfov = 20;
     scene.lookfrom = Point3(13, 2, 3);
@@ -29,6 +29,7 @@ int main() {
 
     scene.defocus_angle = 0.6;
     scene.focus_dist = 10.0;
+    scene.exposure = 0.05;
 
     scene.Init();
 
@@ -54,7 +55,7 @@ int main() {
                     // emission
                     auto emit_color = from_hsv(random_double(0.2, 0.95), 0.7, 1);
                     emit_color = emit_color * emit_color;
-                    sphere_material = MakeEmission(emit_color, random_double(6.0, 15.0));
+                    sphere_material = MakeEmission(emit_color, random_double(6, 15));
                     scene.AddObject(MakeSphere(center, 0.2, sphere_material));
                 }
                 else if (choose_mat < 0.95) {
@@ -96,8 +97,10 @@ int main() {
     scene.AddObject(MakeSphere(Point3(-1.0, 0.0, -1.0), 0.4, material_bubble));
     scene.AddObject(MakeSphere(Point3(1.0, 0.0, -1.0), 0.5, material_right));
 
-
     scene.Render();
-    scene.Write("output/image.png");
+    scene.Write("output/image_albedo.png", scene.get_albedo_map());
+    scene.Write("output/image_normal.png", scene.get_normal_map());
+    scene.Write("output/image_depth.png", scene.get_depth_map());
+    scene.Write("output/image.png", scene.get_color_map());
     return 0;
 }

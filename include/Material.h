@@ -7,7 +7,7 @@ class Material {
 public:
     virtual ~Material() = default;
 
-    virtual void fall(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, bool& scatter, bool& absorbed, bool& emit) const {
+    virtual void fall(const Ray& r_in, const HitRecord& rec, Color& out_albedo, Color& attenuation, Ray& scattered, bool& scatter, bool& emit) const {
         return;
     }
 };
@@ -20,13 +20,15 @@ private:
 public:
     Lambertian(const Color& albedo) : albedo(albedo) {}
 
-    void fall(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, bool& scatter, bool& absorbed, bool& emit) const override {
+    void fall(const Ray& r_in, const HitRecord& rec, Color& out_albedo, Color& attenuation, Ray& scattered, bool& scatter, bool& emit) const override {
         Vec3 scatter_direction = rec.normal + random_unit_vector();
         if (scatter_direction.near_zero())
             scatter_direction = rec.normal;
         scattered = Ray(rec.hitPoint, scatter_direction);
         attenuation = albedo;
+        out_albedo = albedo;
         scatter = true;
+        emit = false;
     }
 
 };
@@ -44,12 +46,14 @@ private:
 public:
     Metal(const Color& albedo, double fuzz) : albedo(albedo), fuzz(fuzz) {}
 
-    void fall(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, bool& scatter, bool& absorbed, bool& emit) const override {
+    void fall(const Ray& r_in, const HitRecord& rec, Color& out_albedo, Color& attenuation, Ray& scattered, bool& scatter, bool& emit) const override {
         Vec3 reflected = reflect(r_in.direction(), rec.normal);
         reflected = normalize(reflected) + (fuzz * random_unit_vector());
         scattered = Ray(rec.hitPoint, reflected);
         attenuation = albedo;
+        out_albedo = albedo;
         scatter = (dot(scattered.direction(), rec.normal) > 0);
+        emit = false;
     }
 
 };
@@ -66,7 +70,9 @@ private:
 public:
     Dielectric(double refractive_index) : refractive_index(refractive_index) {}
 
-    void fall(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, bool& scatter, bool& absorbed, bool& emit) const override {
+    void fall(const Ray& r_in, const HitRecord& rec, Color& out_albedo, Color& attenuation, Ray& scattered, bool& scatter, bool& emit) const override {
+
+        out_albedo = Color(1.0, 1.0, 1.0);
         attenuation = Color(1.0, 1.0, 1.0);
         double ri = rec.front_face ? (1.0 / refractive_index) : refractive_index;
 
@@ -84,6 +90,7 @@ public:
 
         scattered = Ray(rec.hitPoint, direction);
         scatter = true;
+        emit = false;
     }
 private:
     static double reflectance(double cosine, double refraction_index) {
@@ -108,10 +115,11 @@ private:
 public:
     Emission(Color emit_color, double intensity) : emit_color(emit_color), intensity(intensity) {}
 
-    void fall(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, bool& scatter, bool& absorbed, bool& emit) const override {
+    void fall(const Ray& r_in, const HitRecord& rec, Color& out_albedo, Color& attenuation, Ray& scattered, bool& scatter, bool& emit) const override {
         attenuation = intensity * emit_color;
-        emit = true;
+        out_albedo = emit_color;
         scatter = false;
+        emit = true;
     }
 
 

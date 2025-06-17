@@ -10,6 +10,7 @@
 #include <mutex>
 #include <iomanip> // for std::setprecision
 #include <filesystem>  // C++17
+#include <algorithm> 
 
 namespace fs = std::filesystem;
 
@@ -23,19 +24,29 @@ namespace fs = std::filesystem;
 
 std::mutex console_mutex; // Global or static to protect console output
 
+
+class PixelInfo {
+public:
+    Color color;
+    Color albedo;
+    Vec3 normal;
+    double depth;
+};
+
 class Scene {
 public:
-    double canvas_height;
-    double canvas_width;
+    int canvas_height;
+    int canvas_width;
     Interval clip_interval = Interval(0.001, infinity);
     int samples_per_pixel = 20;
-    int max_depth = 10;
+    int max_bouces = 10;
     double vfov = 90;
     Point3 lookfrom = Point3(0, 0, 0);
     Point3 lookat = Point3(0, 0, -1);
     Vec3 vup = Vec3(0, 1, 0);
     double defocus_angle = 0;
     double focus_dist = 10;
+    double exposure = 1;
 
 private:
     Point3 camera_center;
@@ -52,10 +63,12 @@ private:
     Vec3 defocus_disk_v;            // Defocus disk vertical radius
 
     double pixel_samples_scale;
+    std::vector<Color> color_map;
+    std::vector<Color> albedo_map;
+    std::vector<Vec3> normal_map;
+    std::vector<double> depth_map;
 
     std::vector<std::shared_ptr<Object>> objects;
-    std::vector<Color> frame;
-
 public:
     Scene() {}
 
@@ -102,7 +115,10 @@ public:
 
 
     void Render() {
-        frame.resize(canvas_height * canvas_width);
+        color_map.assign(canvas_height * canvas_width, Color(0, 0, 0));
+        albedo_map.assign(canvas_height * canvas_width, Color(0, 0, 0));
+        normal_map.assign(canvas_height * canvas_width, Vec3(0, 0, 0));
+        depth_map.assign(canvas_height * canvas_width, 0.0);
 
         unsigned int thread_count = std::thread::hardware_concurrency();
         if (thread_count == 0) thread_count = 4;
@@ -116,7 +132,16 @@ public:
             for (int j = start_row; j < end_row; j++) {
                 for (int i = 0; i < canvas_width; i++) {
                     int index = j * canvas_width + i;
-                    frame[index] = samplePixel(i, j);
+
+                    PixelInfo pixel;
+
+                    samplePixel(i, j, pixel);
+
+                    color_map[index] = pixel.color;
+                    albedo_map[index] = pixel.albedo;
+                    normal_map[index] = pixel.normal;
+                    depth_map[index] = pixel.depth;
+
                 }
 
                 int completed = lines_done.fetch_add(1) + 1;
@@ -149,19 +174,80 @@ public:
         }
     }
 
-    void Write(fs::path output_path) {
+    void Write(fs::path output_path, std::vector<double> d_buffer) {
         int write_buffer_size = canvas_width * canvas_height * 3;
         unsigned char* write_buffer = new unsigned char[write_buffer_size];
 
-        for (int j = 0; j < canvas_height; ++j) {
-            for (int i = 0; i < canvas_width; ++i) {
+        const double max_depth_valid = 1e5;
+        const double epsilon = 1e-4;
+
+        for (auto& d : d_buffer) {
+            if (!std::isfinite(d) || d > max_depth_valid) {
+                d = max_depth_valid;
+            }
+            if (d < epsilon) {
+                d = epsilon;
+            }
+        }
+
+        auto [min_d_it, max_d_it] = std::minmax_element(d_buffer.begin(), d_buffer.end());
+
+
+        for (int j = 0; j < canvas_height; j++) {
+            for (int i = 0; i < canvas_width; i++) {
                 int idx = j * canvas_width + i;
 
-                double r = frame[idx].x();
-                double g = frame[idx].y();
-                double b = frame[idx].z();
+                double r, g, b;
+                double d = d_buffer[idx];
 
-                auto tone = [](double x) { return x / (1.0 + x); };   // maps [0,∞) → [0,1)
+                // Avoid log(0)
+                const double epsilon = 1e-4;
+                d = std::max(d, epsilon);
+
+                // Log scale normalization
+                double log_d = std::log(d);
+                double log_min = std::log(*min_d_it + epsilon);
+                double log_max = std::log(*max_d_it + epsilon);
+                double scaled = (log_d - log_min) / (log_max - log_min);
+
+                r = g = b = scaled;
+
+                r = linear_to_gamma(r);   // gamma-correct afterwards
+                g = linear_to_gamma(g);
+                b = linear_to_gamma(b);
+
+                Interval col_range(0.0, 0.999);
+                // safe cast
+                write_buffer[idx * 3 + 0] = static_cast<unsigned char>(256 * col_range.clamp(r));
+                write_buffer[idx * 3 + 1] = static_cast<unsigned char>(256 * col_range.clamp(g));
+                write_buffer[idx * 3 + 2] = static_cast<unsigned char>(256 * col_range.clamp(b));
+
+            }
+        }
+
+        fs::create_directories(output_path.parent_path());
+        if (stbi_write_png(output_path.string().c_str(), canvas_width, canvas_height, 3, write_buffer, canvas_width * 3)) {
+            std::cout << "Saved " << output_path.string() << std::endl;
+        }
+        else {
+            std::cerr << "Failed to write PNG" << std::endl;
+        }
+        delete[] write_buffer;
+    }
+
+    void Write(fs::path output_path, std::vector<Color> color_buffer) {
+        int write_buffer_size = canvas_width * canvas_height * 3;
+        unsigned char* write_buffer = new unsigned char[write_buffer_size];
+
+        for (int j = 0; j < canvas_height; j++) {
+            for (int i = 0; i < canvas_width; i++) {
+                int idx = j * canvas_width + i;
+
+                double r = color_buffer[idx].x();
+                double g = color_buffer[idx].y();
+                double b = color_buffer[idx].z();
+
+                auto tone = [](double x) { return x / (1.0 + x); };   // maps [0,inf) → [0,1)
 
                 r = tone(r);
                 g = tone(g);
@@ -180,8 +266,6 @@ public:
             }
         }
 
-
-
         fs::create_directories(output_path.parent_path());
         if (stbi_write_png(output_path.string().c_str(), canvas_width, canvas_height, 3, write_buffer, canvas_width * 3)) {
             std::cout << "Saved " << output_path.string() << std::endl;
@@ -193,8 +277,11 @@ public:
     }
 
 private:
-    Color getRayColor(const Ray& r, int depth) {
-        if (depth <= 0) return Color(0, 0, 0);
+    void getRayHit(const Ray& r, int bounce_depth, PixelInfo& pixel) {
+        if (bounce_depth <= 0) {
+            pixel.color = Color(0, 0, 0);
+            return;
+        }
 
         HitRecord rec;
         bool hit_anything = false;
@@ -211,26 +298,40 @@ private:
 
         if (hit_anything) {
             Ray scattered;
-            Color emitted;
+            Color emitted = Color(0, 0, 0); // Always initialize
             Color attenuation;
-            bool didAbsorb = false;
+            Color albedo;
             bool didScatter = false;
             bool didEmit = false;
 
-            rec.mat->fall(r, rec, attenuation, scattered, didScatter, didAbsorb, didEmit);
-            if (didEmit) emitted = attenuation;
+            rec.mat->fall(r, rec, attenuation, albedo, scattered, didScatter, didEmit);
 
-            if (didScatter)
-                return attenuation * getRayColor(scattered, depth - 1);
-            else if (didEmit)
-                return attenuation;  // Emission color
-            return Color(0, 0, 0);
+            pixel.albedo = albedo;
+            pixel.normal = rec.normal;
+            pixel.depth = rec.t;
+
+            if (didEmit)
+                emitted = attenuation; // attenuation is emission color
+
+            if (didScatter) {
+                PixelInfo pixel2;
+                getRayHit(scattered, bounce_depth - 1, pixel2);
+                pixel.color = emitted + attenuation * pixel2.color;
+                return;
+            }
+            else {
+                pixel.color = emitted;  // Emission color
+            }
+            return;
         }
 
         Vec3 unit_direction = normalize(r.direction());
         double t = (unit_direction.y() + 1.0) / 2.0;
-        double exposure = 0.05;
-        return lerp(Vec3(1, 1, 1) * exposure, Vec3(0.5, 0.7, 1) * exposure, t);
+        pixel.color = lerp(Vec3(1, 1, 1) * exposure, Vec3(0.5, 0.7, 1) * exposure, t);
+        pixel.albedo = Vec3();
+        pixel.normal = Vec3();
+        pixel.depth = clip_interval.max;
+        return;
     }
 
 
@@ -254,19 +355,47 @@ private:
         return Vec3(random_double() - 0.5, random_double() - 0.5, 0);
     }
 
-    Color samplePixel(int i, int j) {
-        Color pixel_color(0, 0, 0);
+    void samplePixel(int i, int j, PixelInfo& pixel) {
+        PixelInfo pixel1;
+        pixel1.depth = 0.0; // Ensure depth is initialized
+
         for (int sample = 0; sample < samples_per_pixel; sample++) {
             Ray r = getRay(i, j);
-            pixel_color = pixel_color + getRayColor(r, max_depth);
+            PixelInfo pixel2;
+            getRayHit(r, max_bouces, pixel2);
+            pixel1.color = pixel1.color + pixel2.color;
+            pixel1.albedo = pixel1.albedo + pixel2.albedo;
+            pixel1.normal = pixel1.normal + pixel2.normal;
+            pixel1.depth += pixel2.depth;
         }
-        return pixel_samples_scale * pixel_color;
+
+        pixel.color = pixel_samples_scale * pixel1.color;
+        pixel.albedo = pixel_samples_scale * pixel1.albedo;
+        pixel.normal = pixel_samples_scale * pixel1.normal;
+        pixel.depth = pixel_samples_scale * pixel1.depth;
+        return;
     }
 
     Point3 defocus_disk_sample() const {
         // Returns a random point in the camera defocus disk.
         Vec3 p = random_in_unit_disk();
         return camera_center + (p[0] * defocus_disk_u) + (p[1] * defocus_disk_v);
+    }
+public:
+    std::vector<Color> get_color_map() const {
+        return color_map;
+    }
+
+    std::vector<Color> get_albedo_map() const {
+        return albedo_map;
+    }
+
+    std::vector<Vec3> get_normal_map() const {
+        return normal_map;
+    }
+
+    std::vector<double> get_depth_map() const {
+        return depth_map;
     }
 };
 
